@@ -68,6 +68,17 @@ bundle exec calendar
 - **Chinese New Year**: Imlek, Cap Go Meh
 - **Christian Holidays**: Good Friday, Easter, Christmas
 
+### Holiday Data
+
+Holiday dates (including *cuti bersama*) live in `data/holidays.json`, sourced from
+[api-hari-libur](https://github.com/andifahruddinakas/api-hari-libur). A monthly
+GitHub Action (`.github/workflows/update-holidays.yml`) re-runs
+`scripts/fetch_holidays.rb` and commits any changes, so the data stays current
+without manual edits — including picking up the next year once the government
+publishes the SKB 3 Menteri decree. The app reads only this file (no network at
+runtime). For years not yet published, the fixed national and Easter-based
+holidays are computed on the fly so the calendar is never empty.
+
 ## Requirements
 
 - Ruby 2.6+

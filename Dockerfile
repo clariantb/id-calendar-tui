@@ -1,4 +1,4 @@
-FROM ruby:3.0-slim
+FROM ruby:3.3-slim
 
 WORKDIR /app
 
@@ -9,6 +9,7 @@ RUN bundle install --without development test
 # Copy the app
 COPY lib ./lib
 COPY bin ./bin
+COPY data ./data
 COPY README.md LICENSE ./
 
 # Install the gem locally

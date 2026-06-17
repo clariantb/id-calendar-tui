@@ -283,13 +283,22 @@ module IndonesiaCalendar
         lines << @pastel.yellow('│') + text.ljust(@screen_width - 2) + @pastel.yellow('│')
       else
         month_holidays.each do |date, holiday|
-          day_str = @pastel.cyan(date.day.to_s.rjust(2))
-          name = @pastel.white(holiday[:name])
           type = format_holiday_type(holiday[:type])
+          type_visible = type.gsub(/\e\[[0-9;]*m/, '')
+
+          # Truncate long official names (e.g. "Cuti Bersama ...") so the panel
+          # border stays aligned and the padding below can never go negative.
+          fixed_width = 4 + 2 + 2 + 1 + type_visible.length # "    " + day + ". " + " " + type
+          name_budget = [@screen_width - 2 - fixed_width, 1].max
+          name_text = holiday[:name]
+          name_text = "#{name_text[0, name_budget - 1]}…" if name_text.length > name_budget
+
+          day_str = @pastel.cyan(date.day.to_s.rjust(2))
+          name = @pastel.white(name_text)
 
           line = "    #{day_str}. #{name} #{type}"
           line_visible = line.gsub(/\e\[[0-9;]*m/, '')
-          lines << @pastel.yellow('│') + line + ' ' * (@screen_width - 2 - line_visible.length) + @pastel.yellow('│')
+          lines << @pastel.yellow('│') + line + ' ' * [@screen_width - 2 - line_visible.length, 0].max + @pastel.yellow('│')
         end
       end
 

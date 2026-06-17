@@ -1,0 +1,39 @@
+name: Update Holidays
+
+# Keeps data/holidays.json accurate with zero manual effort:
+# - runs monthly (and on demand) to refresh the current year and pick up the
+#   next year once the government publishes the SKB 3 Menteri decree.
+on:
+  schedule:
+    - cron: '0 2 1 * *' # 02:00 UTC on the 1st of every month
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+
+      - name: Refresh holiday data
+        run: ruby scripts/fetch_holidays.rb
+
+      - name: Commit changes if any
+        run: |
+          if [ -n "$(git status --porcelain data/holidays.json)" ]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email 'github-actions[bot]@users.noreply.github.com'
+            git add data/holidays.json
+            git commit -m 'chore: auto-update holiday data'
+            git push
+          else
+            echo 'No changes to holiday data.'
+          fi
