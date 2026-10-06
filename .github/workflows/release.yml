@@ -1,16 +1,45 @@
 name: Release
 
+# Runs on a pushed v* tag, or when update-holidays.yml dispatches it with
+# `--ref vX.Y.Z` (tags pushed with GITHUB_TOKEN do not trigger workflows, but
+# workflow_dispatch does). Either way this file is the workflow that publishes.
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # data/holidays.json is hand-edited for SKB amendments; a broken edit would
+  # crash every installed app on start, so never publish one.
+  validate-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+
+      - name: Check release ref
+        run: |
+          version=$(ruby -e 'puts Gem::Specification.load("id-calendar-tui.gemspec").version')
+          if [ "$GITHUB_REF" != "refs/tags/v$version" ]; then
+            echo "::error::Release must run on tag v$version (gemspec version), got $GITHUB_REF"
+            exit 1
+          fi
+
+      - name: Load holiday data
+        run: ruby -Ilib -e 'require "holidays"; IndonesiaCalendar::Holidays.data'
+
   build-and-push-docker:
+    needs: validate-data
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -35,10 +64,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # value= makes the tag explicit; the default only reads it on push events.
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=semver,pattern={{version}},value=${{ github.ref_name }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ github.ref_name }}
+            type=semver,pattern={{major}},value=${{ github.ref_name }}
             type=raw,value=latest
 
       - name: Build and push Docker image
@@ -52,6 +82,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   publish-gem:
+    needs: validate-data
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Required to push tags

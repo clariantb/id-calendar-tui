@@ -278,7 +278,11 @@ module IndonesiaCalendar
       lines << @pastel.yellow("┌─ Hari Libur #{'─' * (@screen_width - 15)}┐")
       lines << @pastel.yellow('│') + (' ' * (@screen_width - 2)) + @pastel.yellow('│')
 
-      if month_holidays.empty?
+      if !IndonesiaCalendar::Holidays.announced?(@view_date.year)
+        unknown_year_notice(@view_date.year).each do |text|
+          lines << @pastel.yellow('│') + @pastel.bright_black(text.ljust(@screen_width - 2)) + @pastel.yellow('│')
+        end
+      elsif month_holidays.empty?
         text = '  Tidak ada hari libur bulan ini'
         lines << @pastel.yellow('│') + text.ljust(@screen_width - 2) + @pastel.yellow('│')
       else
@@ -306,6 +310,16 @@ module IndonesiaCalendar
       lines << @pastel.yellow("└#{'─' * (@screen_width - 2)}┘")
 
       lines.join("\n")
+    end
+
+    def unknown_year_notice(year)
+      latest = IndonesiaCalendar::Holidays.latest_announced_year
+      if latest.nil? || year > latest
+        ["  Hari libur #{year} belum diumumkan pemerintah.",
+         '  Menunggu SKB 3 Menteri tentang libur nasional dan cuti bersama.']
+      else
+        ["  Data hari libur #{year} tidak tersedia."]
+      end
     end
 
     def format_holiday_type(type)

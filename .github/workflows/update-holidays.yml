@@ -1,15 +1,19 @@
 name: Update Holidays
 
-# Keeps data/holidays.json accurate with zero manual effort:
-# - runs monthly (and on demand) to refresh the current year and pick up the
-#   next year once the government publishes the SKB 3 Menteri decree.
+# Imports the official SKB 3 Menteri holiday list into data/holidays.json:
+# - runs weekly so next year's list lands within days of the announcement
+#   (usually September-October) and amendments are noticed quickly;
+# - fails, and GitHub notifies the repository owner, when the decree is out but
+#   could not be imported, or when an amendment seems to have been issued. The
+#   error annotation in the run says exactly what to do.
 on:
   schedule:
-    - cron: '0 2 1 * *' # 02:00 UTC on the 1st of every month
+    - cron: '0 2 * * 1' # 02:00 UTC every Monday
   workflow_dispatch:
 
 permissions:
   contents: write
+  actions: write # keepalive below
 
 jobs:
   update:
@@ -17,23 +21,67 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # release tags, to compare data against the last release
+
+      # GitHub disables scheduled workflows after 60 days without repository
+      # activity, and this job commits at most a few times a year. Re-enabling
+      # through the API counts as activity and keeps the schedule alive.
+      - name: Keep schedule alive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/update-holidays.yml/enable"
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
 
-      - name: Refresh holiday data
+      - name: Import holiday data
         run: ruby scripts/fetch_holidays.rb
 
+      # Load the file exactly as the app does, so neither an import bug nor a
+      # hand edit already on main ships data that crashes the app.
+      - name: Validate holiday data
+        id: validate
+        if: ${{ !cancelled() }}
+        run: ruby -Ilib -e 'require "holidays"; IndonesiaCalendar::Holidays.data'
+
+      # Runs even when the import step failed (tripwire), so a successfully
+      # imported year is still committed alongside the reported problem.
       - name: Commit changes if any
+        id: commit
+        if: ${{ !cancelled() && steps.validate.outcome == 'success' }}
         run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
           if [ -n "$(git status --porcelain data/holidays.json)" ]; then
-            git config user.name 'github-actions[bot]'
-            git config user.email 'github-actions[bot]@users.noreply.github.com'
             git add data/holidays.json
-            git commit -m 'chore: auto-update holiday data'
+            git commit -m 'chore: import holiday data from SKB 3 Menteri'
             git push
           else
             echo 'No changes to holiday data.'
           fi
+
+      # Installed gems and images carry the data they were built with, so ship
+      # every data change: bot imports and hand-added amendments alike. The tag
+      # pushed here does not trigger release.yml (GITHUB_TOKEN), so release.yml
+      # is dispatched explicitly and stays the publishing workflow.
+      - name: Release if holiday data changed
+        if: ${{ !cancelled() && steps.commit.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          last=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+          if [ -n "$last" ] && git diff --quiet "$last" HEAD -- data/holidays.json; then
+            echo "Holiday data unchanged since $last; no release."
+            exit 0
+          fi
+          version=$(ruby scripts/bump_version.rb "$last")
+          git add id-calendar-tui.gemspec CHANGELOG.md
+          git commit -m "chore: release v$version (holiday data update)"
+          git push
+          git tag "v$version"
+          git push origin "v$version"
+          gh workflow run release.yml --ref "v$version"
+          echo "Dispatched release v$version"
