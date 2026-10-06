@@ -4,7 +4,7 @@ Gem::Specification.new do |spec|
   # Fork of adiprnm/id-calendar-tui with official SKB holiday data; the
   # upstream gem name `id-calendar-tui` belongs to the upstream author.
   spec.name          = 'id-calendar-tui-clariant'
-  spec.version       = '0.1.2'
+  spec.version       = '0.1.3'
   spec.authors       = ['clariantb']
   spec.summary       = 'Terminal-based Indonesian calendar with official holiday data'
   spec.description   = 'A TUI calendar application displaying Indonesian public holidays and cuti bersama ' \
